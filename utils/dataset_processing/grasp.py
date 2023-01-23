@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from skimage.draw import polygon
 from skimage.feature import peak_local_max
 
+from scipy.ndimage import gaussian_filter
 
 def _gr_text_to_no(l, offset=(0, 0)):
     """
@@ -169,6 +170,8 @@ class GraspRectangles:
                 ang_out[rr, cc] = gr.angle
             if width:
                 width_out[rr, cc] = gr.length
+        # Apply gaussian filter to grasp quality
+        pos_out =  gaussian_filter(pos_out, 1)   
 
         return pos_out, ang_out, width_out
 
