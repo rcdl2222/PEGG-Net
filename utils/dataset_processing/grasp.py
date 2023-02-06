@@ -160,15 +160,41 @@ class GraspRectangles:
             width_out = np.zeros(shape)
         else:
             width_out = None
+        
+        def normalize_rect(arr, gr, rr, cc):
+            # For now use not so efficient implementation
+            max_dist = np.sqrt((gr.length / 2) ** 2 + (gr.width / 2) ** 2)
+            for i in range(len(rr)):
+                # Calculate euclidean dist from center
+                dist = np.linalg.norm(gr.center - (rr[i], cc[i]))
+                # Calculate grasp quality for pixel
+                arr[rr[i], cc[i]] = 1 - (dist / max_dist) 
+            arr = np.clip(arr, 0.0, 1.0)
+            return arr
+
+        all_grs_pos_out = []
+        all_grs_ang_out = []
+        all_grs_width_out = []
 
         for gr in self.grs:
             rr, cc = gr.compact_polygon_coords(shape)
             if position:
-                pos_out[rr, cc] = 1.0
+                pos_out = normalize_rect(pos_out, gr, rr, cc)
+                all_grs_pos_out.append(pos_out)
+                pos_out = np.zeros(shape)
             if angle:
                 ang_out[rr, cc] = gr.angle
+                all_grs_ang_out.append(ang_out)
+                ang_out = np.zeros(shape)
             if width:
                 width_out[rr, cc] = gr.length
+                all_grs_width_out.append(width_out)
+                width_out = np.zeros(shape)
+
+        pos_out = np.dstack(all_grs_pos_out).max(2)
+        max_pos_ind = np.argmax(np.dstack(all_grs_pos_out), axis=2)
+        ang_out = max_pos_ind.choose(all_grs_ang_out)
+        width_out = max_pos_ind.choose(all_grs_width_out)
 
         return pos_out, ang_out, width_out
 

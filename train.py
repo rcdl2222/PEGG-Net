@@ -223,6 +223,20 @@ def run():
         shuffle=True,
         num_workers=args.num_workers
     )
+    # import numpy as np
+    # import matplotlib.pyplot as plt
+
+    # Load the grasps
+    # for i in range(len(train_dataset.depth_files)):
+    #     bbs = train_dataset.get_gtbb(i, 0, 1.0)
+
+    #     pos_img, ang_img, width_img = bbs.draw((480, 480))
+        # ang_img = np.degrees(ang_img)
+        # plt.imshow(ang_img, cmap="twilight", vmin=-180, vmax=180)
+        # plt.imshow(pos_img, cmap="viridis")
+        # plt.colorbar()
+        # plt.show()
+
     val_dataset = Dataset(file_path=args.dataset_path,
                         output_size=args.input_size,
                         start=args.split, 
