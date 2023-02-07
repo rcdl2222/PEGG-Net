@@ -193,8 +193,10 @@ class GraspRectangles:
 
         pos_out = np.dstack(all_grs_pos_out).max(2)
         max_pos_ind = np.argmax(np.dstack(all_grs_pos_out), axis=2)
-        ang_out = max_pos_ind.choose(all_grs_ang_out)
-        width_out = max_pos_ind.choose(all_grs_width_out)
+        all_grs_ang_out = np.dstack(all_grs_ang_out)
+        all_grs_width_out = np.dstack(all_grs_width_out)
+        ang_out = np.take_along_axis(all_grs_ang_out, max_pos_ind.reshape(shape[0], shape[1], 1), axis=2)
+        width_out = np.take_along_axis(all_grs_width_out, max_pos_ind.reshape(shape[0], shape[1], 1), axis=2)
 
         return pos_out, ang_out, width_out
 
