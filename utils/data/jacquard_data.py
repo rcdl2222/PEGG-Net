@@ -10,7 +10,7 @@ class JacquardDataset(GraspDatasetBase):
     """
     Dataset wrapper for the Jacquard dataset.
     """
-    def __init__(self, file_path, start=0.0, end=1.0, ds_rotate=0, image_wise=False, random_seed=10, **kwargs):
+    def __init__(self, file_path, start=0.0, end=1.0, ds_rotate=0, image_wise=False, random_seed=10, use_saved_grasp_map=False, **kwargs):
         """
         :param file_path: Jacquard Dataset directory.
         :param start: If splitting the dataset, start at this fraction [0,1]
@@ -36,6 +36,15 @@ class JacquardDataset(GraspDatasetBase):
         self.grasp_files = graspf[int(l*start):int(l*end)]
         self.depth_files = depthf[int(l*start):int(l*end)]
         self.rgb_files = rgbf[int(l*start):int(l*end)]
+
+        if use_saved_grasp_map:
+            qualityf = [f.replace('perfect_depth.tiff', 'grasp_quality.tiff') for f in depthf]
+            anglef = [f.replace('perfect_depth.tiff', 'grasp_angle.tiff') for f in depthf]
+            widthf = [f.replace('perfect_depth.tiff', 'grasp_width.tiff') for f in depthf]
+        
+            self.quality_files = qualityf[int(l*start):int(l*end)]
+            self.angle_files = anglef[int(l*start):int(l*end)]
+            self.width_files = widthf[int(l*start):int(l*end)]
 
     def get_gtbb(self, idx, rot=0, zoom=1.0):
         gtbbs = grasp.GraspRectangles.load_from_jacquard_file(self.grasp_files[idx], scale=self.output_size / 1024.0)
@@ -63,6 +72,24 @@ class JacquardDataset(GraspDatasetBase):
             rgb_img.img = rgb_img.img.transpose((2, 0, 1))
             # print("{},{},{},{}".format(rgb_img.max(), rgb_img.min(), np.mean(rgb_img), np.std(rgb_img)))
         return rgb_img.img
+    
+    def get_grasp_map(self, idx, rot=0, zoom=1.0):
+        quality_img = image.DepthImage.from_tiff(self.quality_files[idx])
+        quality_img.rotate(rot)
+        quality_img.zoom(zoom)
+        quality_img.resize((self.output_size, self.output_size))
+
+        angle_img = image.DepthImage.from_tiff(self.angle_files[idx])
+        angle_img.rotate(rot)
+        angle_img.zoom(zoom)
+        angle_img.resize((self.output_size, self.output_size))
+
+        width_img = image.DepthImage.from_tiff(self.width_files[idx])
+        width_img.rotate(rot)
+        width_img.zoom(zoom)
+        width_img.resize((self.output_size, self.output_size))
+
+        return quality_img.img.astype(np.float64), angle_img.img.astype(np.float64), width_img.img.astype(np.float64)
 
     def get_jname(self, idx):
         return '_'.join(self.grasp_files[idx].split(os.sep)[-1].split('_')[:-1])

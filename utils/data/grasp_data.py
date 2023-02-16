@@ -1,5 +1,6 @@
 import numpy as np
-
+from PIL import Image
+import tqdm
 import torch
 import torch.utils.data
 
@@ -11,7 +12,7 @@ class GraspDatasetBase(torch.utils.data.Dataset):
     An abstract dataset for training GG-CNNs in a common format.
     """
     def __init__(self, output_size=480, include_depth=True, include_rgb=False, random_rotate=False,  # changed from 300 to 480
-                 random_zoom=False, input_only=False):
+                 random_zoom=False, input_only=False, use_saved_grasp_map=False):
         """
         :param output_size: Image output size in pixels (square)
         :param include_depth: Whether depth image is included
@@ -26,6 +27,7 @@ class GraspDatasetBase(torch.utils.data.Dataset):
         self.input_only = input_only
         self.include_depth = include_depth
         self.include_rgb = include_rgb
+        self.use_saved_grasp_map = use_saved_grasp_map
 
         self.grasp_files = []
 
@@ -46,6 +48,9 @@ class GraspDatasetBase(torch.utils.data.Dataset):
         raise NotImplementedError()
 
     def get_rgb(self, idx, rot=0, zoom=1.0):
+        raise NotImplementedError()
+    
+    def get_grasp_map(self, idx):
         raise NotImplementedError()
 
     def __getitem__(self, idx):
@@ -69,9 +74,13 @@ class GraspDatasetBase(torch.utils.data.Dataset):
             rgb_img = self.get_rgb(idx, rot, zoom_factor)
 
         # Load the grasps
-        bbs = self.get_gtbb(idx, rot, zoom_factor)
+        if self.use_saved_grasp_map:
+            pos_img, ang_img, width_img = self.get_grasp_map(idx, rot, zoom_factor)
+        
+        else:
+            bbs = self.get_gtbb(idx, rot, zoom_factor)
+            pos_img, ang_img, width_img = bbs.draw((self.output_size, self.output_size))
 
-        pos_img, ang_img, width_img = bbs.draw((self.output_size, self.output_size))
         width_img = np.clip(width_img, 0.0, 150.0)/150.0
 
         if self.include_depth and self.include_rgb:
@@ -104,3 +113,47 @@ class GraspDatasetBase(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.grasp_files)
+
+    def save_grasp_map_images(self):
+
+        for i in tqdm.tqdm(range(len(self))):
+            pos_path = self.grasp_files[i].replace("grasps.txt", "grasp_quality.tiff")
+            ang_path = self.grasp_files[i].replace("grasps.txt", "grasp_angle.tiff")
+            width_path = self.grasp_files[i].replace("grasps.txt", "grasp_width.tiff")
+
+            bbs = self.get_gtbb(i)
+
+            pos_out = np.zeros((self.output_size, self.output_size))
+            ang_out = np.zeros((self.output_size, self.output_size))
+            width_out = np.zeros((self.output_size, self.output_size))
+            
+            all_grs_pos_out = np.zeros((self.output_size, self.output_size, len(bbs.grs)))
+            all_grs_ang_out = np.zeros((self.output_size, self.output_size, len(bbs.grs)))
+            all_grs_width_out = np.zeros((self.output_size, self.output_size, len(bbs.grs)))
+
+            for i, gr in enumerate(bbs.grs):
+                rr, cc = gr.compact_polygon_coords((self.output_size, self.output_size))
+                pos_out = gr.normalize_rect(pos_out, rr, cc)
+                all_grs_pos_out[:, :, i] = pos_out
+                ang_out[rr, cc] = gr.angle
+                all_grs_ang_out[:, :, i] = ang_out
+                width_out[rr, cc] = gr.length
+                all_grs_width_out[:, :, i] = width_out
+                pos_out = np.zeros((self.output_size, self.output_size))
+                ang_out = np.zeros((self.output_size, self.output_size))
+                width_out = np.zeros((self.output_size, self.output_size))
+
+            pos_out = all_grs_pos_out.max(2)
+            max_pos_ind = np.argmax(all_grs_pos_out, axis=2)
+            ang_out = np.take_along_axis(all_grs_ang_out, max_pos_ind.reshape(self.output_size, self.output_size, 1), axis=2)
+            width_out = np.take_along_axis(all_grs_width_out, max_pos_ind.reshape(self.output_size, self.output_size, 1), axis=2)
+                
+            pos_img = Image.fromarray(pos_out)
+            ang_out = ang_out.astype(np.float32).reshape((self.output_size, self.output_size))
+            ang_img = Image.fromarray(ang_out)
+            width_out = width_out.astype(np.float32).reshape((self.output_size, self.output_size))
+            width_img = Image.fromarray(width_out)
+
+            pos_img.save(pos_path)
+            ang_img.save(ang_path)
+            width_img.save(width_path)

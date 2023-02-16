@@ -38,6 +38,7 @@ def parse_args():
     parser.add_argument('--split', type=float, default=0.9, help='Fraction of data for training (remainder is validation)')
     parser.add_argument('--ds-rotate', type=float, default=0.0,
                         help='Shift the start point of the dataset to use a different test/train split for cross validation.')
+    parser.add_argument('--use-saved-grasp-map', action='store_true', help='Use offline grasp map instead of loading map online')
     parser.add_argument('--image-wise', action='store_true', help='Split the Cornell dataset image-wise')
     parser.add_argument('--random-seed', type=int, default=10, help='Random seed for dataset shuffling.')
     parser.add_argument('--augment', action='store_true', help='Use data augmentation (random crops and zooms)')
@@ -216,7 +217,8 @@ def run():
                     random_rotate=args.augment,
                     random_zoom=args.augment,
                     include_depth=args.use_depth, 
-                    include_rgb=args.use_rgb)
+                    include_rgb=args.use_rgb,
+                    use_saved_grasp_map=args.use_saved_grasp_map)
     train_data = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
@@ -228,9 +230,19 @@ def run():
 
     # Load the grasps
     # for i in range(len(train_dataset.depth_files)):
-    #     bbs = train_dataset.get_gtbb(i, 0, 1.0)
+    #     pos_img, ang_img, width_img = train_dataset.get_grasp_map(i)
+        # ang_img = np.degrees(ang_img)
+        # plt.imshow(ang_img, cmap="twilight", vmin=-180, vmax=180)
+        # plt.imshow(pos_img, cmap="viridis")
+        # plt.colorbar()
+        # plt.show()
+        # print(pos_img.shape, pos_img.dtype)
 
-    #     pos_img, ang_img, width_img = bbs.draw((480, 480))
+        # bbs = train_dataset.get_gtbb(i, 0, 1.0)
+
+        # pos_img1, ang_img1, width_img1 = bbs.draw((480, 480))
+        # print(pos_img1.shape, pos_img1.dtype)
+
         # ang_img = np.degrees(ang_img)
         # plt.imshow(ang_img, cmap="twilight", vmin=-180, vmax=180)
         # plt.imshow(pos_img, cmap="viridis")
@@ -247,7 +259,8 @@ def run():
                         random_rotate=False, 
                         random_zoom=False,
                         include_depth=args.use_depth,
-                        include_rgb=args.use_rgb)
+                        include_rgb=args.use_rgb,
+                        use_saved_grasp_map=args.use_saved_grasp_map)
     val_data = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=1,

@@ -160,17 +160,6 @@ class GraspRectangles:
             width_out = np.zeros(shape)
         else:
             width_out = None
-        
-        def normalize_rect(arr, gr, rr, cc):
-            # For now use not so efficient implementation
-            max_dist = np.sqrt((gr.length / 2) ** 2 + (gr.width / 2) ** 2)
-            for i in range(len(rr)):
-                # Calculate euclidean dist from center
-                dist = np.linalg.norm(gr.center - (rr[i], cc[i]))
-                # Calculate grasp quality for pixel
-                arr[rr[i], cc[i]] = 1 - (dist / max_dist) 
-            arr = np.clip(arr, 0.0, 1.0)
-            return arr
 
         all_grs_pos_out = np.zeros((shape[0], shape[1], len(self.grs)))
         all_grs_ang_out = np.zeros((shape[0], shape[1], len(self.grs)))
@@ -179,7 +168,7 @@ class GraspRectangles:
         for i, gr in enumerate(self.grs):
             rr, cc = gr.compact_polygon_coords(shape)
             if position:
-                pos_out = normalize_rect(pos_out, gr, rr, cc)
+                pos_out = gr.normalize_rect(pos_out, rr, cc)
                 all_grs_pos_out[:, :, i] = pos_out
                 pos_out = np.zeros(shape)
             if angle:
@@ -284,6 +273,17 @@ class GraspRectangle:
         :return: Indices of pixels within the centre thrid of the grasp rectangle.
         """
         return Grasp(self.center, self.angle, self.length/3, self.width).as_gr.polygon_coords(shape)
+
+    def normalize_rect(self, arr, rr, cc):
+        # For now use not so efficient implementation
+        max_dist = np.sqrt((self.length / 2) ** 2 + (self.width / 2) ** 2)
+        for i in range(len(rr)):
+            # Calculate euclidean dist from center
+            dist = np.linalg.norm(self.center - (rr[i], cc[i]))
+            # Calculate grasp quality for pixel
+            arr[rr[i], cc[i]] = 1 - (dist / max_dist) 
+        arr = np.clip(arr, 0.0, 1.0)
+        return arr
 
     def iou(self, gr, angle_threshold=np.pi/6):
         """
