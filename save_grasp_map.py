@@ -30,7 +30,6 @@ def main():
 
     train_dataset = Dataset(file_path=args.dataset_path,
                     output_size=args.input_size,
-                    image_wise=args.image_wise,
                     random_seed=args.random_seed,
                     include_depth=args.use_depth, 
                     include_rgb=args.use_rgb)
