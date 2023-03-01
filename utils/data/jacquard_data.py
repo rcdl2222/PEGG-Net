@@ -10,7 +10,7 @@ class JacquardDataset(GraspDatasetBase):
     """
     Dataset wrapper for the Jacquard dataset.
     """
-    def __init__(self, file_path, start=0.0, end=1.0, ds_rotate=0, image_wise=False, random_seed=10, use_saved_grasp_map=False, **kwargs):
+    def __init__(self, file_path, start=0.0, end=1.0, ds_rotate=0, image_wise=False, random_seed=10, **kwargs):
         """
         :param file_path: Jacquard Dataset directory.
         :param start: If splitting the dataset, start at this fraction [0,1]
@@ -37,7 +37,7 @@ class JacquardDataset(GraspDatasetBase):
         self.depth_files = depthf[int(l*start):int(l*end)]
         self.rgb_files = rgbf[int(l*start):int(l*end)]
 
-        if use_saved_grasp_map:
+        if self.use_saved_grasp_map:
             qualityf = [f.replace('perfect_depth.tiff', 'grasp_quality.tiff') for f in depthf]
             anglef = [f.replace('perfect_depth.tiff', 'grasp_angle.tiff') for f in depthf]
             widthf = [f.replace('perfect_depth.tiff', 'grasp_width.tiff') for f in depthf]
