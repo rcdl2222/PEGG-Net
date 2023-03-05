@@ -68,3 +68,57 @@ def calculate_iou_match(grasp_q, grasp_angle, ground_truth_bbs, no_grasps=1, gra
             return True
     else:
         return False
+
+def coverage_linear_func(coverage):
+    return coverage / 0.75 if coverage <= 0.75 else  -(2 * coverage) + 2.5 
+
+def calculate_coverage(grasp_q, grasp_angle, mask_img, input_size, no_grasps=1, grasp_width=None):
+    gs = detect_grasps(grasp_q, grasp_angle, width_img=grasp_width, no_grasps=no_grasps)
+    max_coverage = 0.0
+    for g in gs:
+        grasp_mask = np.zeros(input_size)
+        gr = g.as_gr
+        rr, cc = gr.polygon_coords()
+        grasp_mask[rr, cc] = 1.0
+        intersection = np.minimum(grasp_mask, mask_img)
+        if np.count_nonzero(grasp_mask) == 0:
+            continue
+        else:
+            # plt.imshow(grasp_mask)
+            # plt.show()
+            # plt.imshow(mask_img)
+            # plt.show()
+            coverage = np.count_nonzero(intersection) / np.count_nonzero(grasp_mask)
+            if coverage > max_coverage:
+                max_coverage = coverage
+    return coverage_linear_func(max_coverage)
+
+def calculate_angle_score(grasp_q, grasp_angle, ground_truth_bbs, no_grasps=1, grasp_width=None):
+    gs = detect_grasps(grasp_q, grasp_angle, width_img=grasp_width, no_grasps=no_grasps)
+    if not isinstance(ground_truth_bbs, GraspRectangles):
+        gt_bbs = GraspRectangles.load_from_array(ground_truth_bbs)
+    else:
+        gt_bbs = ground_truth_bbs
+    min_angle_diff = np.pi / 6
+    for g in gs:
+        gr = g.as_gr
+        for gt_gr in gt_bbs:
+            curr_angle_diff = abs((gr.angle - gt_gr.angle + np.pi/2) % np.pi - np.pi/2)
+            if curr_angle_diff < (np.pi / 6) and curr_angle_diff < min_angle_diff:
+                min_angle_diff = curr_angle_diff
+    return 1 - (min_angle_diff / (np.pi / 6))
+
+def calculate_center_score(grasp_q, grasp_angle, ground_truth_bbs, no_grasps=1, grasp_width=None):
+    gs = detect_grasps(grasp_q, grasp_angle, width_img=grasp_width, no_grasps=no_grasps)
+    if not isinstance(ground_truth_bbs, GraspRectangles):
+        gt_bbs = GraspRectangles.load_from_array(ground_truth_bbs)
+    else:
+        gt_bbs = ground_truth_bbs
+    for g in gs:
+        gr = g.as_gr
+        min_center_diff = 1.0
+        for gt_gr in gt_bbs:
+            curr_center_diff = np.sqrt(1 - (np.linalg.norm(abs((gr.center - gt_gr.center))) / np.sqrt(gt_gr.length ** 2 + gt_gr.width ** 2)))
+            if curr_center_diff < min_center_diff:
+                min_center_diff = curr_center_diff
+    return min_center_diff

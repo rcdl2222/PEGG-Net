@@ -32,10 +32,12 @@ class JacquardDataset(GraspDatasetBase):
 
         depthf = [f.replace('grasps.txt', 'perfect_depth.tiff') for f in graspf]
         rgbf = [f.replace('perfect_depth.tiff', 'RGB.png') for f in depthf]
+        maskf = [f.replace('perfect_depth.tiff', 'mask.png') for f in depthf]
 
         self.grasp_files = graspf[int(l*start):int(l*end)]
         self.depth_files = depthf[int(l*start):int(l*end)]
         self.rgb_files = rgbf[int(l*start):int(l*end)]
+        self.mask_files = maskf[int(l*start):int(l*end)]
 
     def get_gtbb(self, idx, rot=0, zoom=1.0):
         gtbbs = grasp.GraspRectangles.load_from_jacquard_file(self.grasp_files[idx], scale=self.output_size / 1024.0)
@@ -63,6 +65,14 @@ class JacquardDataset(GraspDatasetBase):
             rgb_img.img = rgb_img.img.transpose((2, 0, 1))
             # print("{},{},{},{}".format(rgb_img.max(), rgb_img.min(), np.mean(rgb_img), np.std(rgb_img)))
         return rgb_img.img
+
+    def get_mask(self, idx, rot=0, zoom=1.0):
+        mask_img = image.Image.from_file(self.mask_files[idx])
+        mask_img.rotate(rot)
+        mask_img.zoom(zoom)
+        mask_img.resize((self.output_size, self.output_size))
+        mask_img.img = mask_img.img.astype(np.float32)/255.0
+        return mask_img.img
 
     def get_jname(self, idx):
         return '_'.join(self.grasp_files[idx].split(os.sep)[-1].split('_')[:-1])
