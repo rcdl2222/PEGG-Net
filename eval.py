@@ -6,6 +6,7 @@ import torch.utils.data
 from models.common import post_process_output
 from utils.dataset_processing import evaluation, grasp
 from utils.data import get_dataset
+from models import get_network
 
 logging.basicConfig(level=logging.INFO)
 
@@ -32,6 +33,7 @@ def parse_args():
 
     parser.add_argument('--n-grasps', type=int, default=1, help='Number of grasps to consider per image')
     parser.add_argument('--iou-eval', action='store_true', help='Compute success based on IoU metric.')
+    parser.add_argument('--score-eval', action='store_true', help='Compute success based on score metric.')
     parser.add_argument('--jacquard-output', action='store_true', help='Jacquard-dataset style output')
     parser.add_argument('--vis', action='store_true', help='Visualise the network output')
 
@@ -49,8 +51,12 @@ if __name__ == '__main__':
     args = parse_args()
 
     # Load Network
-    net = torch.load(args.network)
-    device = torch.device("cuda:0")
+    ggcnn = get_network("peggnet")
+    net = ggcnn(input_channels=1)
+    net.load_state_dict(torch.load(args.network, map_location=torch.device("cpu")))
+    net.eval()
+    device = torch.device("cpu")
+    net = net.to(device)
 
     # Load Dataset
     logging.info('Loading {} Dataset...'.format(args.dataset.title()))
@@ -78,7 +84,8 @@ if __name__ == '__main__':
     logging.info('Number of test images: {}'.format(len(test_data)))
     logging.info('Done')
 
-    results = {'correct': 0, 'failed': 0}
+    results = {'correct': 0, 'failed': 0, 'total_score': 0.0, 'coverage_score': 0.0,
+               'angle_score': 0.0, 'center_score': 0.0}
 
     if args.jacquard_output:
         jo_fn = args.network + '_jacquard_output.txt'
@@ -104,6 +111,25 @@ if __name__ == '__main__':
                     results['correct'] += 1
                 else:
                     results['failed'] += 1
+            if args.score_eval:
+                size = (test_dataset.output_size, test_dataset.output_size)
+                coverage_score = evaluation.calculate_coverage(q_img, ang_img, test_dataset.get_mask(idx), 
+                                                                size, 
+                                                                grasp_width=width_img)
+                angle_score = evaluation.calculate_angle_score(q_img, ang_img, test_data.dataset.get_gtbb(didx, rot, zoom),
+                                                   no_grasps=args.n_grasps,
+                                                   grasp_width=width_img,
+                                                   )
+                center_score = evaluation.calculate_center_score(q_img, ang_img, test_data.dataset.get_gtbb(didx, rot, zoom),
+                                                   no_grasps=args.n_grasps,
+                                                   grasp_width=width_img,
+                                                   )
+                print(coverage_score, angle_score, center_score)
+                results['total_score'] += (1/3) * coverage_score + (1/3) * angle_score + (1/3) * center_score
+                results['coverage_score'] += coverage_score
+                results['angle_score'] += angle_score
+                results['center_score'] += center_score
+
 
             if args.jacquard_output:
                 grasps = grasp.detect_grasps(q_img, ang_img, width_img=width_img, no_grasps=1)
@@ -121,6 +147,12 @@ if __name__ == '__main__':
         logging.info('IOU Results: %d/%d = %f' % (results['correct'],
                               results['correct'] + results['failed'],
                               results['correct'] / (results['correct'] + results['failed'])))
+    if args.score_eval:
+        size = len(test_data)
+        logging.info("Coverage Score: %f", results['coverage_score'] / size)
+        logging.info("Angle Score: %f", results['angle_score'] / size)
+        logging.info("Center Score: %f", results['center_score'] / size)
+        logging.info("Overall Score: %f", results['total_score'] / size)
 
     if args.jacquard_output:
         logging.info('Jacquard output saved to {}'.format(jo_fn))
