@@ -118,7 +118,11 @@ def calculate_center_score(grasp_q, grasp_angle, ground_truth_bbs, no_grasps=1, 
         gr = g.as_gr
         min_center_diff = 1.0
         for gt_gr in gt_bbs:
-            curr_center_diff = np.sqrt(1 - (np.linalg.norm(abs((gr.center - gt_gr.center))) / np.sqrt(gt_gr.length ** 2 + gt_gr.width ** 2)))
+            dist_proportion = (np.linalg.norm(abs(gr.center - gt_gr.center)) / np.sqrt(gt_gr.length ** 2 + gt_gr.width ** 2))
+            if dist_proportion > 1.0:
+                # Do not consider score when center distances are larger than diagonal of grasp rectangle
+                continue
+            curr_center_diff = np.sqrt(1 - dist_proportion)
             if curr_center_diff < min_center_diff:
                 min_center_diff = curr_center_diff
     return min_center_diff
