@@ -113,23 +113,24 @@ if __name__ == '__main__':
                     results['failed'] += 1
             if args.score_eval:
                 size = (test_dataset.output_size, test_dataset.output_size)
-                coverage_score = evaluation.calculate_coverage(q_img, ang_img, test_dataset.get_mask(idx), 
-                                                                size, 
-                                                                grasp_width=width_img)
-                angle_score = evaluation.calculate_angle_score(q_img, ang_img, test_data.dataset.get_gtbb(didx, rot, zoom),
-                                                   no_grasps=args.n_grasps,
-                                                   grasp_width=width_img,
-                                                   )
-                center_score = evaluation.calculate_center_score(q_img, ang_img, test_data.dataset.get_gtbb(didx, rot, zoom),
-                                                   no_grasps=args.n_grasps,
-                                                   grasp_width=width_img,
-                                                   )
-                print(coverage_score, angle_score, center_score)
-                results['total_score'] += (1/3) * coverage_score + (1/3) * angle_score + (1/3) * center_score
+                coverage_score, angle_score, center_score = evaluation.calculate_score(
+                    q_img, 
+                    ang_img, 
+                    test_dataset.get_mask(idx), 
+                    size, 
+                    test_data.dataset.get_gtbb(didx, rot, zoom),
+                    grasp_width=width_img
+                    )
+                score = (1/3) * coverage_score + (1/3) * angle_score + (1/3) * center_score
+                # logging.info("Image index %i scores", idx)
+                # logging.info("Coverage Score: %.3f", coverage_score)
+                # logging.info("Angle Score: %.3f", angle_score)
+                # logging.info("Center Score: %.3f", center_score)
+                # logging.info("Overall Score: %.3f", score)          
+                results['total_score'] += score      
                 results['coverage_score'] += coverage_score
                 results['angle_score'] += angle_score
                 results['center_score'] += center_score
-
 
             if args.jacquard_output:
                 grasps = grasp.detect_grasps(q_img, ang_img, width_img=width_img, no_grasps=1)
@@ -149,10 +150,10 @@ if __name__ == '__main__':
                               results['correct'] / (results['correct'] + results['failed'])))
     if args.score_eval:
         size = len(test_data)
-        logging.info("Coverage Score: %f", results['coverage_score'] / size)
-        logging.info("Angle Score: %f", results['angle_score'] / size)
-        logging.info("Center Score: %f", results['center_score'] / size)
-        logging.info("Overall Score: %f", results['total_score'] / size)
+        logging.info("Mean Coverage Score: %f", results['coverage_score'] / size)
+        logging.info("Mean Angle Score: %f", results['angle_score'] / size)
+        logging.info("Mean Center Score: %f", results['center_score'] / size)
+        logging.info("CAC Score: %f", results['total_score'] / size)
 
     if args.jacquard_output:
         logging.info('Jacquard output saved to {}'.format(jo_fn))
