@@ -77,21 +77,24 @@ class JacquardDataset(GraspDatasetBase):
     
     def get_grasp_map(self, idx, rot=0, zoom=1.0):
         quality_img = image.DepthImage.from_tiff(self.quality_files[idx])
+        quality_img.img = quality_img.img.astype(np.float64)
         quality_img.rotate(rot)
         quality_img.zoom(zoom)
         quality_img.resize((self.output_size, self.output_size))
 
         angle_img = image.DepthImage.from_tiff(self.angle_files[idx])
+        angle_img.img = angle_img.img.astype(np.float64)
         angle_img.rotate(rot)
         angle_img.zoom(zoom)
         angle_img.resize((self.output_size, self.output_size))
 
         width_img = image.DepthImage.from_tiff(self.width_files[idx])
+        width_img.img = width_img.img.astype(np.float64)
         width_img.rotate(rot)
         width_img.zoom(zoom)
         width_img.resize((self.output_size, self.output_size))
 
-        return quality_img.img.astype(np.float64), angle_img.img.astype(np.float64), width_img.img.astype(np.float64)
+        return quality_img.img, angle_img.img, width_img.img
 
     def get_mask(self, idx, rot=0, zoom=1.0):
         mask_img = image.Image.from_file(self.mask_files[idx])
