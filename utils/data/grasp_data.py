@@ -12,7 +12,7 @@ class GraspDatasetBase(torch.utils.data.Dataset):
     An abstract dataset for training GG-CNNs in a common format.
     """
     def __init__(self, output_size=480, include_depth=True, include_rgb=False, random_rotate=False,  # changed from 300 to 480
-                 random_zoom=False, input_only=False, use_saved_grasp_map=False):
+                 random_zoom=False, input_only=False, use_saved_grasp_map=False, min_angle=False, max_width=False):
         """
         :param output_size: Image output size in pixels (square)
         :param include_depth: Whether depth image is included
@@ -22,12 +22,14 @@ class GraspDatasetBase(torch.utils.data.Dataset):
         :param input_only: Whether to return only the network input (no labels)
         """
         self.output_size = output_size
-        self.random_rotate = random_rotate
+        self.random_rotate = False
         self.random_zoom = random_zoom
         self.input_only = input_only
         self.include_depth = include_depth
         self.include_rgb = include_rgb
         self.use_saved_grasp_map = use_saved_grasp_map
+        self.min_angle = min_angle
+        self.max_width = max_width
 
         self.grasp_files = []
 
@@ -76,10 +78,18 @@ class GraspDatasetBase(torch.utils.data.Dataset):
         # Load the grasps
         if self.use_saved_grasp_map:
             pos_img, ang_img, width_img = self.get_grasp_map(idx, rot, zoom_factor)
+            # if self.min_angle:
+            #     ang_img = self.get_min_angle(idx, rot, zoom_factor)
+            # if self.max_width:
+            #     width_img = self.get_max_width(idx, rot, zoom_factor)
         
         else:
             bbs = self.get_gtbb(idx, rot, zoom_factor)
             pos_img, ang_img, width_img = bbs.draw((self.output_size, self.output_size))
+            if self.min_angle:
+                ang_img = self.get_min_angle(idx, rot, zoom_factor)
+            if self.max_width:
+                width_img = self.get_max_width(idx, rot, zoom_factor)
 
         width_img = np.clip(width_img, 0.0, 150.0)/150.0
 
@@ -157,3 +167,57 @@ class GraspDatasetBase(torch.utils.data.Dataset):
             pos_img.save(pos_path)
             ang_img.save(ang_path)
             width_img.save(width_path)
+
+    def save_min_angle_map(self):
+        import os
+        for i in tqdm.tqdm(range(len(self))):
+            ang_path = self.grasp_files[i].replace("grasps.txt", "min_angle.tiff")
+            if os.path.exists(ang_path):
+                os.remove(ang_path)
+
+            bbs = self.get_gtbb(i)
+
+            ang_out = np.full((self.output_size, self.output_size), 10.0)
+            
+            all_grs_ang_out = np.full((self.output_size, self.output_size, len(bbs.grs)), 10.0)
+
+            for i, gr in enumerate(bbs.grs):
+                rr, cc = gr.compact_polygon_coords((self.output_size, self.output_size))
+                ang_out[rr, cc] = gr.angle
+                all_grs_ang_out[:, :, i] = ang_out
+                ang_out = np.full((self.output_size, self.output_size), 10.0)
+
+            ang_out = all_grs_ang_out.min(2)
+            ang_out[ang_out == 10.0] = 0.0
+                
+            ang_out = ang_out.astype(np.float32).reshape((self.output_size, self.output_size))
+            ang_img = Image.fromarray(ang_out)
+
+            ang_img.save(ang_path)
+    
+    def save_max_width_map(self):
+        import os
+        for i in tqdm.tqdm(range(len(self))):
+            width_path = self.grasp_files[i].replace("grasps.txt", "max_width.tiff")
+            if os.path.exists(width_path):
+                os.remove(width_path)
+
+            bbs = self.get_gtbb(i)
+
+            width_out = np.full((self.output_size, self.output_size), -10.0)
+            
+            all_grs_width_out = np.full((self.output_size, self.output_size, len(bbs.grs)), -10.0)
+
+            for i, gr in enumerate(bbs.grs):
+                rr, cc = gr.compact_polygon_coords((self.output_size, self.output_size))
+                width_out[rr, cc] = gr.length
+                all_grs_width_out[:, :, i] = width_out
+                ang_out = np.full((self.output_size, self.output_size), -10.0)
+
+            width_out = all_grs_width_out.max(2)
+            width_out[width_out == -10.0] = 0.0
+                
+            width_out = width_out.astype(np.float32).reshape((self.output_size, self.output_size))
+            width_out = Image.fromarray(width_out)
+
+            width_out.save(width_path)

@@ -19,31 +19,33 @@ def plot_output(rgb_img, depth_img, grasp_q_img, grasp_angle_img, no_grasps=1, g
 
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(2, 2, 1)
-    ax.imshow(rgb_img)
-    for g in gs:
-        g.plot(ax)
+    ax.imshow(rgb_img.T)
+    # for g in gs:
+    #     g.plot(ax)
     ax.set_title('RGB')
     ax.axis('off')
 
     ax = fig.add_subplot(2, 2, 2)
-    ax.imshow(depth_img, cmap='gray')
-    for g in gs:
-        g.plot(ax)
-    ax.set_title('Depth')
+    plot = ax.imshow(grasp_width_img, cmap='gray')
+    # for g in gs:
+    #     g.plot(ax)
+    ax.set_title('Grasp Width')
     ax.axis('off')
+    plt.colorbar(plot)
 
     ax = fig.add_subplot(2, 2, 3)
     plot = ax.imshow(grasp_q_img, cmap='jet', vmin=0, vmax=1)
-    ax.set_title('Q')
+    ax.set_title('Grasp Quality')
     ax.axis('off')
     plt.colorbar(plot)
 
     ax = fig.add_subplot(2, 2, 4)
     plot = ax.imshow(grasp_angle_img, cmap='hsv', vmin=-np.pi / 2, vmax=np.pi / 2)
-    ax.set_title('Angle')
+    ax.set_title('Grasp Angle')
     ax.axis('off')
     plt.colorbar(plot)
-    plt.show()
+    plt.savefig("sample_gqn_output.png")
+    # plt.show()
 
 
 def calculate_iou_match(grasp_q, grasp_angle, ground_truth_bbs, no_grasps=1, grasp_width=None):
@@ -70,9 +72,9 @@ def calculate_iou_match(grasp_q, grasp_angle, ground_truth_bbs, no_grasps=1, gra
         return False
 
 def coverage_linear_func(coverage):
-    return coverage / 0.75 if coverage <= 0.75 else  -(2 * coverage) + 2.5 
+    return coverage / 0.75 if coverage <= 0.75 else  -(4 * coverage) + 4
 
-def calculate_score(grasp_q, grasp_angle, mask_img, input_size, ground_truth_bbs, no_grasps=1, grasp_width=None):
+def calculate_score(grasp_q, grasp_angle, mask_img, input_size, ground_truth_bbs, no_grasps=1, grasp_width=None, debug_path=None):
     gs = detect_grasps(grasp_q, grasp_angle, width_img=grasp_width, no_grasps=no_grasps)
     curr_score_sum = 0.0
     scores = (0.0, 0.0, 0.0)
@@ -82,21 +84,24 @@ def calculate_score(grasp_q, grasp_angle, mask_img, input_size, ground_truth_bbs
         gt_bbs = ground_truth_bbs
     for g in gs:
         gr = g.as_gr
-        coverage_score = calculate_coverage(gr, mask_img, input_size)
+        coverage_score = calculate_coverage(gr, mask_img, input_size, debug_path=debug_path)
         angle_score, center_score = calculate_angle_and_center_score(gr, gt_bbs)
         score_sum = coverage_score + angle_score + center_score
         if score_sum > curr_score_sum:
             scores = (coverage_score, angle_score, center_score)
     return scores
 
-def calculate_coverage(gr, mask_img, input_size):
+def calculate_coverage(gr, mask_img, input_size, debug_path=None):
     grasp_mask = np.zeros(input_size)
-    rr, cc = gr.polygon_coords()
+    rr, cc = gr.polygon_coords(input_size)
+
+
     grasp_mask[rr, cc] = 1.0
     intersection = np.minimum(grasp_mask, mask_img)
     if np.count_nonzero(grasp_mask) == 0:
         return 0.0
     coverage = np.count_nonzero(intersection) / np.count_nonzero(grasp_mask)
+    print("Coverage: "+ str(coverage))
     return coverage_linear_func(coverage)
 
 def calculate_angle_and_center_score(gr, gt_bbs):
@@ -109,7 +114,7 @@ def calculate_angle_and_center_score(gr, gt_bbs):
             # Do not consider score when center distances are larger than diagonal of grasp rectangle
             continue
         curr_angle_diff = abs((gr.angle - gt_gr.angle + np.pi/2) % np.pi - np.pi/2)
-        curr_center_diff = np.sqrt(1 - dist_proportion)
+        curr_center_diff = 1 - dist_proportion
         if curr_angle_diff < (np.pi / 6):
             min_angle_diff = curr_angle_diff
         combined_score = 1 - (min_angle_diff / (np.pi / 6)) + curr_center_diff

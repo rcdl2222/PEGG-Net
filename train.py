@@ -39,9 +39,12 @@ def parse_args():
     parser.add_argument('--ds-rotate', type=float, default=0.0,
                         help='Shift the start point of the dataset to use a different test/train split for cross validation.')
     parser.add_argument('--use-saved-grasp-map', action='store_true', help='Use offline grasp map instead of loading map online')
+    parser.add_argument('--min-angle', action='store_true', help='Use minimum angle for training')
+    parser.add_argument('--max-width', action='store_true', help='Use max width for training')
     parser.add_argument('--image-wise', action='store_true', help='Split the Cornell dataset image-wise')
     parser.add_argument('--random-seed', type=int, default=10, help='Random seed for dataset shuffling.')
     parser.add_argument('--augment', action='store_true', help='Use data augmentation (random crops and zooms)')
+    parser.add_argument('--stratified', action='store_true', help='Stratify jacquard and polygonal')
     parser.add_argument('--num-workers', type=int, default=8, help='Dataset workers')
     
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate')
@@ -195,13 +198,13 @@ def run():
         cv2.namedWindow('Display', cv2.WINDOW_NORMAL)
 
     # Set-up output directories
-    dt = datetime.datetime.now().strftime('%y%m%d_%H%M')
-    net_desc = '{}_{}'.format(dt, '_'.join(args.description.split()))
+    # dt = datetime.datetime.now().strftime('%y%m%d_%H%M')
+    # net_desc = '{}_{}'.format(dt, '_'.join(args.description.split()))
 
-    save_folder = os.path.join(args.outdir, net_desc)
-    if not os.path.exists(save_folder):
-        os.makedirs(save_folder)
-    tb = tensorboardX.SummaryWriter(os.path.join(args.logdir, net_desc))
+    # save_folder = os.path.join(args.outdir, net_desc)
+    # if not os.path.exists(save_folder):
+    #     os.makedirs(save_folder)
+    # tb = tensorboardX.SummaryWriter(os.path.join(args.logdir, net_desc))
 
     # Load Dataset
     logging.info('Loading {} Dataset...'.format(args.dataset.title()))
@@ -218,36 +221,55 @@ def run():
                     random_zoom=args.augment,
                     include_depth=args.use_depth, 
                     include_rgb=args.use_rgb,
-                    use_saved_grasp_map=args.use_saved_grasp_map)
+                    use_saved_grasp_map=args.use_saved_grasp_map,
+                    stratified=args.stratified,
+                    min_angle=args.min_angle,
+                    max_width=args.max_width)
     train_data = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers
     )
-    # import numpy as np
-    # import matplotlib.pyplot as plt
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import cv2
 
     # Load the grasps
-    # for i in range(len(train_dataset.depth_files)):
-    #     pos_img, ang_img, width_img = train_dataset.get_grasp_map(i)
-        # ang_img = np.degrees(ang_img)
-        # plt.imshow(ang_img, cmap="twilight", vmin=-180, vmax=180)
-        # plt.imshow(pos_img, cmap="viridis")
-        # plt.colorbar()
-        # plt.show()
-        # print(pos_img.shape, pos_img.dtype)
+    from utils.dataset_processing.evaluation import plot_output
+    from utils.dataset_processing import image
+    for i in range(len(train_dataset.depth_files)):
+        if "1_1a9fa4c269cfcc1b738e43095496b061" in train_dataset.depth_files[i]:
+            pos_img, ang_img, width_img = train_dataset.get_grasp_map(i)
+            rgb_img = image.Image.from_file(train_dataset.rgb_files[i])
+            rgb_img = rgb_img.swapaxes(0, 2)
+            # rgb_img = rgb_img.swapaxes(1, 2)
+            plot_output(
+                rgb_img,
+                train_dataset.get_depth(i),
+                pos_img,
+                ang_img,
+                grasp_width_img=width_img
 
-        # bbs = train_dataset.get_gtbb(i, 0, 1.0)
+            )
+            # ang_img = np.degrees(ang_img)
+            # plt.imshow(pos_img, cmap="viridis")
+            # plt.savefig("quality.png")
+            # plt.imshow(ang_img, cmap="twilight", vmin=-np.pi / 2, vmax=np.pi / 2)
+            # plt.colorbar()
+            # plt.show()
+            # print(pos_img.shape, pos_img.dtype)
 
-        # pos_img1, ang_img1, width_img1 = bbs.draw((480, 480))
-        # print(pos_img1.shape, pos_img1.dtype)
+            # bbs = train_dataset.get_gtbb(i, 0, 1.0)
 
-        # ang_img = np.degrees(ang_img)
-        # plt.imshow(ang_img, cmap="twilight", vmin=-180, vmax=180)
-        # plt.imshow(pos_img, cmap="viridis")
-        # plt.colorbar()
-        # plt.show()
+            # pos_img1, ang_img1, width_img1 = bbs.draw((480, 480))
+            # print(pos_img1.shape, pos_img1.dtype)
+
+            # ang_img = np.degrees(ang_img)
+            # plt.imshow(ang_img, cmap="twilight", vmin=-180, vmax=180)
+            # plt.imshow(pos_img, cmap="viridis")
+            # plt.colorbar()
+            # plt.show()
 
     val_dataset = Dataset(file_path=args.dataset_path,
                         output_size=args.input_size,
@@ -260,77 +282,81 @@ def run():
                         random_zoom=False,
                         include_depth=args.use_depth,
                         include_rgb=args.use_rgb,
-                        use_saved_grasp_map=args.use_saved_grasp_map)
+                        use_saved_grasp_map=args.use_saved_grasp_map,
+                        stratified=args.stratified,
+                        min_angle=args.min_angle,
+                        max_width=args.max_width)
     val_data = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=1,
         shuffle=False,
         num_workers=args.num_workers
     )
-    logging.info('Done')
-    logging.info('The size of the {} Dataset is: {}'.format(args.dataset.title(), len(train_dataset)+len(val_dataset)))
-    logging.info('Number of training images: {}'.format(len(train_dataset)))
-    logging.info('Number of validation images: {}'.format(len(val_dataset)))
-    logging.info('Data augmentation: {}'.format(args.augment))
+    # logging.info('Done')
+    # logging.info('The size of the {} Dataset is: {}'.format(args.dataset.title(), len(train_dataset)+len(val_dataset)))
+    # logging.info('Number of training images: {}'.format(len(train_dataset)))
+    # logging.info('Number of validation images: {}'.format(len(val_dataset)))
+    # logging.info('Data augmentation: {}'.format(args.augment))
 
-    # Load the network
-    logging.info('Loading Network...')
-    input_channels = 1*args.use_depth + 3*args.use_rgb
-    logging.info("Number of input channels: {}".format(input_channels))
+    # # Load the network
+    # logging.info('Loading Network...')
+    # input_channels = 1*args.use_depth + 3*args.use_rgb
+    # logging.info("Number of input channels: {}".format(input_channels))
 
-    ggcnn = get_network(args.network)
+    # ggcnn = get_network(args.network)
 
-    net = ggcnn(input_channels=input_channels)
-    device = torch.device("cuda:0")
-    net = net.to(device)
-    optimizer = optim.Adam(net.parameters(), lr=args.lr)
-    # optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), args.lr, momentum=0.9, weight_decay=0.0001) # SGD with Momentum
-    logging.info('Done')
+    # net = ggcnn(input_channels=input_channels)
+    # torch.cuda.set_device(1)
+    # device = torch.device("cuda:1")
+    # net = net.to(device)
+    # optimizer = optim.Adam(net.parameters(), lr=args.lr)
+    # # optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), args.lr, momentum=0.9, weight_decay=0.0001) # SGD with Momentum
+    # logging.info('Done')
+    # logging.info("Augmentation: "+ str(train_dataset.use_saved_grasp_map))
+    # # Print model architecture.
+    # summary(net, (input_channels, args.input_size, args.input_size))
+    # f = open(os.path.join(save_folder, 'arch.txt'), 'w')
+    # sys.stdout = f
+    # summary(net, (input_channels, args.input_size, args.input_size))
+    # sys.stdout = sys.__stdout__
+    # f.close()
 
-    # Print model architecture.
-    summary(net, (input_channels, args.input_size, args.input_size))
-    f = open(os.path.join(save_folder, 'arch.txt'), 'w')
-    sys.stdout = f
-    summary(net, (input_channels, args.input_size, args.input_size))
-    sys.stdout = sys.__stdout__
-    f.close()
+    # best_iou = 0.0
+    # for epoch in range(1, args.epochs + 1):
+    #     logging.info('Beginning Epoch {:02d}'.format(epoch))
 
-    best_iou = 0.0
-    for epoch in range(1, args.epochs + 1):
-        logging.info('Beginning Epoch {:02d}'.format(epoch))
-
-        if epoch in args.lr_step:
-            print(args.lr_step)
-            lr = args.lr * (0.1 ** (args.lr_step.index(epoch) + 1))
-            print('Drop LR to', lr)
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr
+    #     if epoch in args.lr_step:
+    #         print(args.lr_step)
+    #         lr = args.lr * (0.1 ** (args.lr_step.index(epoch) + 1))
+    #         print('Drop LR to', lr)
+    #         for param_group in optimizer.param_groups:
+    #             param_group['lr'] = lr
           
-        train_results = train(epoch, net, device, train_data, optimizer, args.batches_per_epoch, vis=args.vis)
+    #     train_results = train(epoch, net, device, train_data, optimizer, args.batches_per_epoch, vis=args.vis)
 
-        # Log training losses to tensorboard
-        tb.add_scalar('loss/train_loss', train_results['loss'], epoch)
-        for n, l in train_results['losses'].items():
-            tb.add_scalar('train_loss/' + n, l, epoch)
+    #     # Log training losses to tensorboard
+    #     tb.add_scalar('loss/train_loss', train_results['loss'], epoch)
+    #     for n, l in train_results['losses'].items():
+    #         tb.add_scalar('train_loss/' + n, l, epoch)
 
-        # Run Validation
-        logging.info('Validating...')
-        test_results = validate(net, device, val_data) #, args.val_batches)
-        logging.info('%d/%d = %f' % (test_results['correct'], test_results['correct'] + test_results['failed'],
-                                     test_results['correct']/(test_results['correct']+test_results['failed'])))
+    #     # Run Validation
+    #     logging.info('Validating...')
+    #     test_results = validate(net, device, val_data) #, args.val_batches)
+    #     logging.info('%d/%d = %f' % (test_results['correct'], test_results['correct'] + test_results['failed'],
+    #                                  test_results['correct']/(test_results['correct']+test_results['failed'])))
 
-        # Log validation results to tensorbaord
-        tb.add_scalar('loss/IOU', test_results['correct'] / (test_results['correct'] + test_results['failed']), epoch)
-        tb.add_scalar('loss/val_loss', test_results['loss'], epoch)
-        for n, l in test_results['losses'].items():
-            tb.add_scalar('val_loss/' + n, l, epoch)
+    #     # Log validation results to tensorbaord
+    #     tb.add_scalar('loss/IOU', test_results['correct'] / (test_results['correct'] + test_results['failed']), epoch)
+    #     tb.add_scalar('loss/val_loss', test_results['loss'], epoch)
+    #     for n, l in test_results['losses'].items():
+    #         tb.add_scalar('val_loss/' + n, l, epoch)
 
-        # Save best performing network
-        iou = test_results['correct'] / (test_results['correct'] + test_results['failed'])
-        if iou > best_iou or epoch == 0 or (epoch % 10) == 0:
-            torch.save(net, os.path.join(save_folder, 'epoch_%02d_iou_%0.2f' % (epoch, iou)))
-            torch.save(net.state_dict(), os.path.join(save_folder, 'epoch_%02d_iou_%0.2f_statedict.pt' % (epoch, iou)))
-            best_iou = iou
+    #     # Save best performing network
+    #     iou = test_results['correct'] / (test_results['correct'] + test_results['failed'])
+    #     if iou > best_iou or epoch == 0 or (epoch % 10) == 0:
+    #         torch.save(net, os.path.join(save_folder, 'epoch_%02d_iou_%0.2f' % (epoch, iou)))
+    #         torch.save(net.state_dict(), os.path.join(save_folder, 'epoch_%02d_iou_%0.2f_statedict.pt' % (epoch, iou)))
+    #         best_iou = iou
 
 
 if __name__ == '__main__':

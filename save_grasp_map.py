@@ -14,6 +14,7 @@ def parse_args():
     # Dataset & Training
     parser.add_argument('--dataset', type=str, help='Dataset Name ("cornell" or "jacquard")')
     parser.add_argument('--dataset-path', type=str, help='Path to dataset')
+    parser.add_argument('--min-angle', action='store_true', help='Save min angle')
 
     args = parser.parse_args()
     return args
@@ -26,8 +27,12 @@ def main():
     Dataset = get_dataset(args.dataset)
 
     train_dataset = Dataset(file_path=args.dataset_path, output_size=args.input_size)
-    
-    train_dataset.save_grasp_map_images()
+    if args.min_angle:
+        train_dataset.save_max_width_map()
+        # train_dataset.save_min_angle_map()
+    else:
+        print("comes here")
+        # train_dataset.save_grasp_map_images()
         
 if __name__ == "__main__":
     main()
